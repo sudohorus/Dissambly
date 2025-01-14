@@ -2,10 +2,11 @@ import sys
 import os
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QVBoxLayout, 
                          QWidget, QLabel, QFileDialog, QProgressDialog,
-                         QPlainTextEdit, QScrollBar)
+                         QPlainTextEdit, QScrollBar, QMenuBar, QMenu, QMessageBox,
+                         QFontDialog, QStatusBar)
 from PyQt6.QtGui import (QFont, QSyntaxHighlighter, QTextCharFormat, QColor,
-                      QPainter, QPen, QPainterPath)
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QRect, QPoint
+                      QPainter, QPen, QPainterPath, QAction, QKeySequence)
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QRect, QPoint, QSettings
 import subprocess
 import re
 import math
@@ -27,6 +28,15 @@ class CodeWidget(QPlainTextEdit):
         self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         self.setViewportMargins(50, 0, 50, 0)
         
+    def wheelEvent(self, event):
+        if event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            delta = event.angleDelta().y()
+            if delta > 0:
+                self.zoomIn(2)
+            else:
+                self.zoomOut(2)
+        else:
+            super().wheelEvent(event)
 
 class AssemblyHighlighter(QSyntaxHighlighter):
     def __init__(self, parent=None):
@@ -185,39 +195,23 @@ class DissamblyWindow(QMainWindow):
         self.setWindowTitle(self.base_title)
         self.setMinimumSize(900, 700)
         self.current_file = None
+        self.settings = QSettings('Dissambly', 'DissamblyApp')
         self.setup_ui()
+        self.setup_menubar()
+        self.load_settings()
         
         self.decompile_thread = None
         self.loading_dialog = None
         
     def setup_ui(self):
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
+        
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
         self.main_layout = QVBoxLayout(main_widget)
         self.main_layout.setSpacing(10)
         self.main_layout.setContentsMargins(20, 20, 20, 20)
-        
-        button_style = """
-            QPushButton {
-                background-color: #4ECDC4;
-                border: none;
-                color: white;
-                padding: 10px 20px;
-                border-radius: 5px;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: #45B7AF;
-            }
-            QPushButton:pressed {
-                background-color: #3EA39C;
-            }
-        """
-        
-        self.select_button = QPushButton("Select .exe file")
-        self.select_button.setStyleSheet(button_style)
-        self.select_button.clicked.connect(self.select_file)
-        self.main_layout.addWidget(self.select_button)
         
         self.file_label = QLabel()
         self.file_label.setStyleSheet("color: #666; font-size: 12px;")
@@ -228,26 +222,101 @@ class DissamblyWindow(QMainWindow):
         self.highlighter = AssemblyHighlighter(self.text_edit.document())
         self.main_layout.addWidget(self.text_edit)
         
-        self.save_button = QPushButton("Save in Assembly")
-        self.save_button.setStyleSheet(button_style)
-        self.save_button.clicked.connect(self.save_assembly)
-        self.main_layout.addWidget(self.save_button)
+
+    def setup_menubar(self):
+        menubar = self.menuBar()
+        
+        file_menu = menubar.addMenu('&File')
+        
+        open_action = QAction('&Open...', self)
+        open_action.setShortcut(QKeySequence.StandardKey.Open)
+        open_action.triggered.connect(self.select_file)
+        file_menu.addAction(open_action)
+        
+        save_action = QAction('&Save As...', self)
+        save_action.setShortcut(QKeySequence.StandardKey.SaveAs)
+        save_action.triggered.connect(self.save_assembly)
+        file_menu.addAction(save_action)
+        
+        file_menu.addSeparator()
+        
+        exit_action = QAction('&Exit', self)
+        exit_action.setShortcut(QKeySequence.StandardKey.Quit)
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
+        
+        edit_menu = menubar.addMenu('&Edit')
+        
+        font_action = QAction('&Change Font...', self)
+        font_action.triggered.connect(self.change_font)
+        edit_menu.addAction(font_action)
+        
+        view_menu = menubar.addMenu('&View')
+        
+        zoom_in_action = QAction('Zoom &In', self)
+        zoom_in_action.setShortcut(QKeySequence.StandardKey.ZoomIn)
+        zoom_in_action.triggered.connect(lambda: self.text_edit.zoomIn(2))
+        view_menu.addAction(zoom_in_action)
+        
+        zoom_out_action = QAction('Zoom &Out', self)
+        zoom_out_action.setShortcut(QKeySequence.StandardKey.ZoomOut)
+        zoom_out_action.triggered.connect(lambda: self.text_edit.zoomOut(2))
+        view_menu.addAction(zoom_out_action)
+        
+        help_menu = menubar.addMenu('&Help')
+        
+        about_action = QAction('&About', self)
+        about_action.triggered.connect(self.show_about)
+        help_menu.addAction(about_action)
+
+    def change_font(self):
+        current_font = self.text_edit.font()
+        font, ok = QFontDialog.getFont(current_font, self)
+        if ok:
+            self.text_edit.setFont(font)
+            self.settings.setValue('font', font.toString())
+            
+    def show_about(self):
+        QMessageBox.about(self, 'About Dissambly',
+            'Dissambly is a tool for decompiling executable files into assembly code.\n\n'
+            'Version: 1.0\n'
+            'Author: sudohorus\n'
+            'License: MIT')
+            
+    def load_settings(self):
+        geometry = self.settings.value('geometry')
+        if geometry:
+            self.restoreGeometry(geometry)
+            
+        font_str = self.settings.value('font')
+        if font_str:
+            font = QFont()
+            font.fromString(font_str)
+            self.text_edit.setFont(font)
+            
+    def closeEvent(self, event):
+        self.settings.setValue('geometry', self.saveGeometry())
+        self.settings.setValue('font', self.text_edit.font().toString())
+        event.accept()
         
     def select_file(self):
+        last_dir = self.settings.value('last_directory', '')
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Select .exe file",
-            "",
+            last_dir,
             ".exe Files (*.exe)"
         )
         
         if file_path:
+            self.settings.setValue('last_directory', os.path.dirname(file_path))
             self.current_file = file_path
             file_name = os.path.basename(file_path)
             self.setWindowTitle(f"{self.base_title} - {file_name}")
             self.file_label.setText(file_path)
+            self.status_bar.showMessage(f"Loading {file_name}...")
             self.start_decompile(file_path)
-    
+
     def start_decompile(self, file_path):
         self.loading_dialog = LoadingDialog(self)
         self.loading_dialog.show()
@@ -257,7 +326,7 @@ class DissamblyWindow(QMainWindow):
         self.decompile_thread.error.connect(self.on_decompile_error)
         self.decompile_thread.progress.connect(self.loading_dialog.setValue)
         self.decompile_thread.start()
-    
+
     def on_decompile_finished(self, output, connections):
         self.text_edit.clear()
         chunk_size = 1000
@@ -270,12 +339,15 @@ class DissamblyWindow(QMainWindow):
         
         if self.loading_dialog:
             self.loading_dialog.close()
-    
+            
+        self.status_bar.showMessage("Decompilation completed", 5000)
+
     def on_decompile_error(self, error_msg):
         self.text_edit.setText(error_msg)
         if self.loading_dialog:
             self.loading_dialog.close()
         self.setWindowTitle(self.base_title)
+        self.status_bar.showMessage("Error during decompilation", 5000)
     
     def save_assembly(self):
         if not self.text_edit.toPlainText().strip():
@@ -294,12 +366,58 @@ class DissamblyWindow(QMainWindow):
         )
         
         if file_path:
-            with open(file_path, 'w') as f:
-                f.write(self.text_edit.toPlainText())
+            try:
+                with open(file_path, 'w') as f:
+                    f.write(self.text_edit.toPlainText())
+                self.status_bar.showMessage(f"File saved successfully: {file_path}", 5000)
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to save file: {str(e)}")
+                self.status_bar.showMessage("Error saving file", 5000)
 
 def main():
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
+    
+    app.setStyleSheet("""
+        QMenuBar {
+            background-color: #2B2B2B;
+            color: white;
+        }
+        QMenuBar::item:selected {
+            background-color: #3C3C3C;
+        }
+        QMenu {
+            background-color: #2B2B2B;
+            color: white;
+            border: 1px solid #3C3C3C;
+        }
+        QMenu::item:selected {
+            background-color: #4ECDC4;
+        }
+        QStatusBar {
+            background-color: #2B2B2B;
+            color: white;
+        }
+        QMessageBox {
+            background-color: #2B2B2B;
+            color: white;
+        }
+        QMessageBox QPushButton {
+            background-color: #4ECDC4;
+            color: white;
+            border: none;
+            padding: 5px 15px;
+            border-radius: 3px;
+        }
+        QMessageBox QPushButton:hover {
+            background-color: #45B7AF;
+        }
+        QFontDialog {
+            background-color: #2B2B2B;
+            color: white;
+        }
+    """)
+    
     window = DissamblyWindow()
     window.show()
     sys.exit(app.exec())
