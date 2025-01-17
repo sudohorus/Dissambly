@@ -64,6 +64,9 @@ class DissamblyWindow(QMainWindow):
         open_action.setShortcut('Ctrl+O')
         open_action.triggered.connect(self.select_file)
         menu.addAction(open_action)
+
+        self.recent_files_menu = menu.addMenu("Recent Files")
+        self.update_recent_files_menu()
         
         save_action = QAction('&Save As...', self)
         save_action.setShortcut('Ctrl+S')
@@ -140,6 +143,21 @@ class DissamblyWindow(QMainWindow):
         self.settings.setValue('geometry', self.saveGeometry())
         self.settings.setValue('font', self.text_edit.font().toString())
         event.accept()
+
+    def update_recent_files_menu(self):
+        self.recent_files_menu.clear()
+        recent_files = self.settings.value("recent_files", [])
+        
+        if not recent_files:
+            empty_action = QAction("No recent files", self)
+            empty_action.setEnabled(False)
+            self.recent_files_menu.addAction(empty_action)
+            return
+
+        for file_path in recent_files:
+            action = QAction(file_path, self)
+            action.triggered.connect(lambda checked, path=file_path: self.open_recent_file(path))
+            self.recent_files_menu.addAction(action)
         
     def select_file(self):
         last_dir = self.settings.value('last_directory', '')
@@ -147,17 +165,38 @@ class DissamblyWindow(QMainWindow):
             self,
             "Select File",
             last_dir,
-            ".exe Files (*.exe *.elf *.bin *.pe)"
+            ".exe Files (*.exe *.elf *.bin *.pe *.asm)"
         )
         
         if file_path:
             self.settings.setValue('last_directory', os.path.dirname(file_path))
             self.current_file = file_path
-            file_name = os.path.basename(file_path)
-            self.setWindowTitle(f"{self.base_title} - {file_name}")
+            self.update_recent_files(file_path)
+            self.setWindowTitle(f"{self.base_title} - {os.path.basename(file_path)}")
             self.file_label.setText(file_path)
-            self.status_bar.showMessage(f"Loading {file_name}...")
+            self.status_bar.showMessage(f"Loading {os.path.basename(file_path)}...")
             self.start_decompile(file_path)
+
+    def update_recent_files(self, file_path):
+        recent_files = self.settings.value("recent_files", [])
+        if file_path in recent_files:
+            recent_files.remove(file_path)
+        recent_files.insert(0, file_path)
+        recent_files = recent_files[:10]
+        self.settings.setValue("recent_files", recent_files)
+        self.update_recent_files_menu()
+
+    def open_recent_file(self, file_path):
+        if os.path.exists(file_path):
+            self.current_file = file_path
+            self.update_recent_files(file_path)
+            self.setWindowTitle(f"{self.base_title} - {os.path.basename(file_path)}")
+            self.file_label.setText(file_path)
+            self.status_bar.showMessage(f"Loading {os.path.basename(file_path)}...")
+            self.start_decompile(file_path)
+        else:
+            QMessageBox.warning(self, "File Not Found", f"The file {file_path} could not be found.")
+
 
     def start_decompile(self, file_path):
         self.loading_dialog = LoadingDialog(self)
