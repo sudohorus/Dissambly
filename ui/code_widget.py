@@ -15,7 +15,7 @@ class CodeWidget(QPlainTextEdit):
             }
         """)
         self.connections = []
-        self.setReadOnly(True)
+        self.setReadOnly(False)
         self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         self.setViewportMargins(50, 0, 50, 0)
         

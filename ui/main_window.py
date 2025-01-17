@@ -40,25 +40,22 @@ class DissamblyWindow(QMainWindow):
         self.main_layout.addWidget(self.file_label)
         
         self.text_edit = CodeWidget()
+        self.text_edit.setUndoRedoEnabled(True)
         self.highlighter = AssemblyHighlighter(self.text_edit.document())
         self.main_layout.addWidget(self.text_edit)
 
     def setup_menubar(self):
         menubar = self.menuBar()
         
-        # File Menu
         file_menu = menubar.addMenu('&File')
         self._add_file_menu_actions(file_menu)
         
-        # Edit Menu
         edit_menu = menubar.addMenu('&Edit')
         self._add_edit_menu_actions(edit_menu)
         
-        # View Menu
         view_menu = menubar.addMenu('&View')
         self._add_view_menu_actions(view_menu)
         
-        # Help Menu
         help_menu = menubar.addMenu('&Help')
         self._add_help_menu_actions(help_menu)
 
@@ -81,9 +78,15 @@ class DissamblyWindow(QMainWindow):
         menu.addAction(exit_action)
 
     def _add_edit_menu_actions(self, menu):
-        font_action = QAction('&Change Font...', self)
-        font_action.triggered.connect(self.change_font)
-        menu.addAction(font_action)
+        undo_action = QAction('Undo', self)
+        undo_action.setShortcut('Ctrl+Z')
+        undo_action.triggered.connect(self.text_edit.undo)
+        menu.addAction(undo_action)
+
+        redo_action = QAction('Redo', self)
+        redo_action.setShortcut('Ctrl+Y')
+        redo_action.triggered.connect(self.text_edit.redo)
+        menu.addAction(redo_action)
 
     def _add_view_menu_actions(self, menu):
         zoom_in_action = QAction('Zoom &In', self)
@@ -95,6 +98,12 @@ class DissamblyWindow(QMainWindow):
         zoom_out_action.setShortcut('Ctrl+-')
         zoom_out_action.triggered.connect(lambda: self.text_edit.zoomOut(2))
         menu.addAction(zoom_out_action)
+
+        menu.addSeparator()
+
+        font_action = QAction('&Change Font...', self)
+        font_action.triggered.connect(self.change_font)
+        menu.addAction(font_action)
 
     def _add_help_menu_actions(self, menu):
         about_action = QAction('&About', self)
@@ -113,7 +122,8 @@ class DissamblyWindow(QMainWindow):
             'Dissambly is a tool for decompiling executable files into assembly code.\n\n'
             'Version: 1.0\n'
             'Author: sudohorus\n'
-            'License: MIT')
+            'License: MIT\n'
+            )
             
     def load_settings(self):
         geometry = self.settings.value('geometry')
@@ -135,9 +145,9 @@ class DissamblyWindow(QMainWindow):
         last_dir = self.settings.value('last_directory', '')
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "Select .exe file",
+            "Select File",
             last_dir,
-            ".exe Files (*.exe)"
+            ".exe Files (*.exe *.elf *.bin *.pe)"
         )
         
         if file_path:
@@ -175,7 +185,7 @@ class DissamblyWindow(QMainWindow):
         self.status_bar.showMessage("Decompilation completed", 5000)
 
     def on_decompile_error(self, error_msg):
-        self.text_edit.setText(error_msg)
+        self.text_edit.setPlainText(error_msg)
         if self.loading_dialog:
             self.loading_dialog.close()
         self.setWindowTitle(self.base_title)
