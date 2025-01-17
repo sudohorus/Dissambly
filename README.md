@@ -4,7 +4,7 @@
 
 ## 🎯 Features
 
--  **Load and Decompile** `.exe` files into assembly code with ease.
+-  **Load and Decompile** `.exe, .fe or .elf` files into assembly code with ease.
 -  **Syntax Highlighting** for assembly instructions, registers, addresses, and comments.
 -  **Save Decompiled Code** as a `.asm` file for further analysis or use.
 -  **Lightweight & User-Friendly Interface** built with PyQt6 for a smooth experience.
